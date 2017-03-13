@@ -1,6 +1,5 @@
 ﻿using System;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Kontur.GameStats.Server.Domains
 {
@@ -28,8 +27,9 @@ namespace Kontur.GameStats.Server.Domains
 
         protected bool Equals(Match other)
         {
-            return string.Equals(Server, other.Server) && Timestamp.Equals(other.Timestamp) &&
-                   Equals(Results, other.Results);
+            return string.Equals(Server, other.Server) &&
+                Timestamp.ToUniversalTime().Equals(other.Timestamp.ToUniversalTime()) &&
+                Equals(Results, other.Results);
         }
 
         public override bool Equals(object obj)

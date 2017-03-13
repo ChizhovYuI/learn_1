@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Kontur.GameStats.Server.Domains;
 using Kontur.GameStats.Server.Utils;
 using NUnit.Framework;
@@ -9,7 +10,7 @@ namespace Kontur.GameStats.Server.Tests
     [TestFixture]
     public class Database_Should
     {
-        private Database Database { get; } = new Database("I:\\Test.sqlite");
+        private Database Database { get; } = new Database("Test.sqlite");
         [SetUp]
         public void DatabaseInit()
         {
@@ -171,8 +172,8 @@ namespace Kontur.GameStats.Server.Tests
             matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
 
             var actualServerStat = Database.GetServerStat(server.Endpoint);
-
             var expectedMaximumMatchesPerDay = matches.GroupBy(i => i.Timestamp.Date).Max(i => i.Count());
+
             Assert.AreEqual(expectedMaximumMatchesPerDay, actualServerStat.MaximumMatchesPerDay);
         }
 
@@ -382,7 +383,7 @@ namespace Kontur.GameStats.Server.Tests
         }
 
         [Test]
-        public void Succes_WhenGetPlayerStat_ForRandomsMatches()
+        public void Success_WhenGetPlayerStat_ForRandomMatches()
         {
             var data = new RandomData(10);
             var servers = data.GetServers();
@@ -394,18 +395,165 @@ namespace Kontur.GameStats.Server.Tests
         }
 
         [Test]
-        public void FillRandomData()
+        public void AverageScoreboardPercent100_WhenGetPlayerStat_ForOnePlayerInMatch()
         {
-            var data = new RandomData(10000, 10, 10, 100000);
-            var servers = data.GetServers();
-            servers.ForEach(i => Database.InsertOrUpdateServer(i));
-            for(var i = 0; i < 100000; i++)
-            {
-                foreach(var match in data.GetUniqueRandomMatchesForServer(data.GetRandomServer(), 100, 14))
-                {
-                    Database.TryInsertOrIgnoreMatch(match);
-                }
-            }
+            var data = new RandomData(1, 1, 1, 1);
+            var server = data.GetRandomServer();
+            var match = data.GetRandomMatchForServer(server, DateTime.Now);
+            
+            Database.InsertOrUpdateServer(server);
+            Database.TryInsertOrIgnoreMatch(match);
+            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[0].Name);
+
+            Assert.AreEqual(100, playerStat.AverageScoreboardPercent);
         }
+
+        [Test]
+        public void IgnoreCase_WhenGetPlayerStat_ForDifferentCasePlayerName()
+        {
+            var match = ExampleDomains.Match;
+            Database.InsertOrUpdateServer(ExampleDomains.Server);
+            Database.TryInsertOrIgnoreMatch(match);
+
+            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[0].Name.ToUpper());
+
+            Assert.AreEqual(1, playerStat.TotalMatchesPlayed);
+        }
+
+        [Test]
+        public void Success_WhenGetRecentMatches_For1MatchInDatabase()
+        {
+            var match = ExampleDomains.Match;
+            Database.InsertOrUpdateServer(ExampleDomains.Server);
+            Database.TryInsertOrIgnoreMatch(match);
+            
+            var matches = Database.GetRecentMatches(5);
+
+            Assert.AreEqual(1, matches.Count);
+            Assert.AreEqual(match, matches[0]);
+        }
+
+        [Test]
+        public void MatchesCount5_WhenGet5RecentMatches_For10MatchesInDatabase()
+        {
+            var data = new RandomData(1);
+            var server = data.GetRandomServer();
+            var matches = data.GetUniqueRandomMatchesForServer(server, 10);
+            
+            Database.InsertOrUpdateServer(server);
+            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            var expectedMatches = matches.OrderByDescending(i => i.Timestamp).Take(5).ToList();
+            var actualMatches = Database.GetRecentMatches(5);
+            
+            Assert.AreEqual(5, actualMatches.Count);
+            Assert.True(expectedMatches.SequenceEqual(actualMatches));
+        }
+
+        [Test]
+        public void PlayersCount0_WhenGetBestPlayers_ForEmptyDatabase()
+        {
+            var actualBestPlayers = Database.GetBestPlayers(1);
+
+            Assert.AreEqual(0, actualBestPlayers.Count);
+        }
+
+        [Test]
+        public void PlayersCount0_WhenGetBestPlayers_For9Mathces1Player()
+        {
+            var data = new RandomData(1, 1, 1, 1);
+            var server = data.GetRandomServer();
+            var matches = data.GetUniqueRandomMatchesForServer(server, 9);
+
+            Database.InsertOrUpdateServer(server);
+            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = Database.GetBestPlayers(1);
+
+            Assert.AreEqual(0, actualBestPlayers.Count);
+        }
+
+        [Test]
+        public void PlayersCount1_WhenGetBestPlayers_For10Mathces1Player()
+        {
+            var data = new RandomData(1, 1, 1, 1);
+            var server = data.GetRandomServer();
+            var matches = data.GetUniqueRandomMatchesForServer(server, 10);
+
+            Database.InsertOrUpdateServer(server);
+            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = Database.GetBestPlayers(1);
+
+            Assert.AreEqual(1, actualBestPlayers.Count);
+        }
+
+        [Test]
+        public void Success_WhenGetBestPlayers_For100RandomMathces5Players()
+        {
+            var data = new RandomData(1);
+            var server = data.GetRandomServer();
+            var matches = data.GetUniqueRandomMatchesForServer(server, 100);
+
+            Database.InsertOrUpdateServer(server);
+            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = Database.GetBestPlayers(5);
+
+            Assert.AreNotEqual(0, actualBestPlayers.Count);
+        }
+
+        [Test]
+        public void CountServers0_WhenGetPopularServers_ForServerWithoutMatches()
+        {
+            var data = new RandomData(1);
+            var server = data.GetRandomServer();
+
+            Database.InsertOrUpdateServer(server);
+            var actualPopularServers = Database.GetPopularServers(5);
+
+            Assert.AreEqual(0, actualPopularServers.Count);
+        }
+
+        [Test]
+        public void CountServers5_WhenGetPopularServers_For5ServersWithMatches()
+        {
+            var data = new RandomData(5);
+            var servers = data.GetServers();
+            var matches = servers.SelectMany(i => data.GetUniqueRandomMatchesForServer(i, 1)).ToList();
+            servers.ForEach(i => Database.InsertOrUpdateServer(i));
+            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+
+            var actualPopularServers = Database.GetPopularServers(5);
+
+            Assert.AreEqual(5, actualPopularServers.Count);
+        }
+
+        [Test]
+        public void AverageMatchesPerDay1_WhenGetPopularServers_For2MathcesInNeighboringDays()
+        {
+            var data = new RandomData(1);
+            var server = data.GetRandomServer();
+            var match1 = data.GetRandomMatchForServer(server, DateTime.Now);
+            var match2 = data.GetRandomMatchForServer(server, DateTime.Now.AddDays(1));
+            Database.InsertOrUpdateServer(server);
+            Database.TryInsertOrIgnoreMatch(match1);
+            Database.TryInsertOrIgnoreMatch(match2);
+
+            var actualPopularServers = Database.GetPopularServers(1);
+
+            Assert.AreEqual(1m, actualPopularServers[0].AverageMatchesPerDay);
+        }
+
+        //[Test]
+        //public void FillRandomData()
+        //{
+        //    var data = new RandomData(10000, 10, 10, 100000);
+        //    var servers = data.GetServers();
+        //    servers.ForEach(i => Database.InsertOrUpdateServer(i));
+        //    for(var i = 0; i < 100000; i++)
+        //    {
+        //        foreach(var match in data.GetUniqueRandomMatchesForServer(data.GetRandomServer(), 100, 14))
+        //        {
+        //            Database.TryInsertOrIgnoreMatch(match);
+        //        }
+        //    }
+        //}
     }
 }

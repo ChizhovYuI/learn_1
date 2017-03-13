@@ -27,13 +27,13 @@ namespace Kontur.GameStats.Server.Tests
                 servers.Select(
                            i =>
                                new Domains.Server(i,
-                                   new ServerInfo(new Guid().ToString(), GetRandomEnumerable(gameModes, gm => gm).ToArray())))
+                                   new ServerInfo(Guid.NewGuid().ToString(), GetUniqueRandomEnumerable(gameModes, gm => gm).ToArray())))
                        .ToList();
         }
         public Domains.Server GetRandomServer()
         {
             return new Domains.Server(GetRandomFromList(servers),
-                new ServerInfo(new Guid().ToString(), GetRandomEnumerable(gameModes, i => i).ToArray()));
+                new ServerInfo(Guid.NewGuid().ToString(), GetUniqueRandomEnumerable(gameModes, i => i).ToArray()));
         }
 
         public List<Match> GetUniqueRandomMatchesForServer(Domains.Server server, int count, int deltaDays = 1)
@@ -43,9 +43,9 @@ namespace Kontur.GameStats.Server.Tests
             while (list.Count != count)
             {
                 var match = GetRandomMatchForServer(server,
-                    DateTime.UtcNow.AddSeconds(rnd.Next(deltaDays * secondsInDay) - deltaDays * secondsInDay / 2));
-                if (list.All(i => i.Timestamp != match.Timestamp))
-                    list.Add(match);
+                    DateTime.Parse($"{DateTime.UtcNow:s}").ToUniversalTime().AddSeconds(
+                        rnd.Next(deltaDays * secondsInDay) - deltaDays * secondsInDay / 2));
+                if (list.All(i => i.Timestamp != match.Timestamp)) list.Add(match);
             }
 
             return list;
@@ -54,13 +54,13 @@ namespace Kontur.GameStats.Server.Tests
         public Match GetRandomMatchForServer(Domains.Server server, DateTime dateTime)
         {
             return
-                new Match(server.Endpoint, dateTime,
+                new Match(server.Endpoint, dateTime.AddMilliseconds(-dateTime.Millisecond),
                     new MatchResult(GetRandomFromList(maps),
                         GetRandomFromList(gameModes),
                         rnd.Next(50),
                         rnd.Next(50),
-                        (decimal)rnd.NextDouble() * 15,
-                        GetRandomEnumerable(players, GetRandomScoreboard).ToList()));
+                        Math.Round((decimal)rnd.NextDouble() * 15, 6),
+                        GetUniqueRandomEnumerable(players, GetRandomScoreboard, 100).ToList()));
         }
 
         public Scoreboard GetRandomScoreboard(string player)
@@ -78,13 +78,13 @@ namespace Kontur.GameStats.Server.Tests
             return list[rnd.Next(list.Count)];
         }
 
-        private IEnumerable<T> GetRandomEnumerable<T>(List<string> list, Func<string, T> getItem)
+        private IEnumerable<T> GetUniqueRandomEnumerable<T>(List<string> list, Func<string, T> getItem,
+            int maxLength = Int32.MaxValue)
         {
-            var length = rnd.Next(1, list.Count);
-            for (var i = 0; i < length; i++)
-            {
-                yield return getItem(GetRandomFromList(list));
-            }
+            var length = rnd.Next(1, Math.Min(list.Count, maxLength));
+            var hashSet = new HashSet<string>();
+            while (hashSet.Count < length) hashSet.Add(GetRandomFromList(list));
+            return hashSet.Select(getItem);
         }
     }
 }

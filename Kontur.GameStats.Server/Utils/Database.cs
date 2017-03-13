@@ -5,6 +5,7 @@ using Kontur.GameStats.Server.Domains;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Net;
 
 namespace Kontur.GameStats.Server.Utils
 {
@@ -286,6 +287,131 @@ LIMIT 1";
             return playerStat;
         }
 
+        public List<Match> GetRecentMatches(int count)
+        {
+            var matches = new List<Match>();
+            if(count<=0) return matches;
+            using (var connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    var query = $@"
+SELECT
+{MatchResult.Properties.Id},
+{Match.Properties.Server},
+{Match.Properties.Timestamp},
+{MatchResult.Properties.Map},
+{MatchResult.Properties.GameMode},
+{MatchResult.Properties.FragLimit},
+{MatchResult.Properties.TimeLimit},
+{MatchResult.Properties.TimeElapsed}
+FROM {Tables.Match}
+ORDER BY {Tables.Match}.{Match.Properties.Timestamp} DESC
+LIMIT {count}";
+var command = new SQLiteCommand(query, connection, transaction);
+                    var reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        matches.Add(new Match((string) reader[Match.Properties.Server],
+                            (DateTime) reader[Match.Properties.Timestamp],
+                            new MatchResult((string) reader[MatchResult.Properties.Map],
+                                (string) reader[MatchResult.Properties.GameMode],
+                                (int) reader[MatchResult.Properties.FragLimit],
+                                (int) reader[MatchResult.Properties.TimeLimit],
+                                (decimal) reader[MatchResult.Properties.TimeElapsed], new List<Scoreboard>(),
+                                (long) reader[MatchResult.Properties.Id])));
+                    }
+                    reader.Close();
+                    matches.ForEach(i => FillScoreboard(i.Results, connection, transaction));
+
+                    transaction.Commit();
+                }
+                connection.Close();
+            }
+            
+            return matches;
+        }
+
+        public List<BestPlayer> GetBestPlayers(int count)
+        {
+            var bestPlayers = new List<BestPlayer>();
+            if(count<=0) return bestPlayers;
+            using (var connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    var query = $@"
+SELECT {BestPlayer.Properties.Name},
+1.0*SUM({Scoreboard.Properties.Kills})/SUM({Scoreboard.Properties.Deaths}) AS {BestPlayer.Properties.KillToDeathRatio}
+FROM {Tables.Scoreboard}
+GROUP BY {Scoreboard.Properties.SearchName}
+HAVING SUM({Scoreboard.Properties.Deaths}) > 0 AND COUNT({Scoreboard.Properties.MatchId}) >= 10
+ORDER BY {BestPlayer.Properties.KillToDeathRatio} DESC
+LIMIT {count}";
+var command = new SQLiteCommand(query, connection, transaction);
+                    var reader = command.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        bestPlayers.Add(new BestPlayer((string) reader[Scoreboard.Properties.Name],
+                            (decimal)(double) reader[BestPlayer.Properties.KillToDeathRatio]));
+                    }
+                    reader.Close();
+
+                    transaction.Commit();
+                }
+                connection.Close();
+            }
+            
+            return bestPlayers;
+        }
+
+        public List<PopularServer> GetPopularServers(int count)
+        {
+            var popularServers = new List<PopularServer>();
+            if(count<=0) return popularServers;
+            using (var connection = new SQLiteConnection(connectionString))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    var lastMatchDateTime = GetLastMatchDateTime(connection, transaction);
+                    if (lastMatchDateTime != null)
+                    {
+                        var query = $@"
+SELECT 
+{PopularServer.Properties.Endpoint},
+{PopularServer.Properties.Name},
+1.0*COUNT({Tables.Match}.{Match.Properties.Server})/
+(julianday(date('{DateTimeForSqLite(lastMatchDateTime.Value)}'))-
+julianday(date(MIN({Tables.Match}.{Match.Properties.Timestamp}))) + 1)
+AS {PopularServer.Properties.AverageMatchesPerDay}
+FROM {Tables.Server}
+LEFT JOIN {Tables.Match} ON {Tables.Server}.{Domains.Server.Properties.Endpoint} = {Tables.Match}.{Match.Properties
+                            .Server}
+GROUP BY {Tables.Match}.{Match.Properties.Server}
+ORDER BY {PopularServer.Properties.AverageMatchesPerDay} DESC
+LIMIT {count}";
+                        var command = new SQLiteCommand(query, connection, transaction);
+                        var reader = command.ExecuteReader();
+                        while (reader.Read())
+                        {
+                            popularServers.Add(new PopularServer(
+                                (string) reader[PopularServer.Properties.Endpoint],
+                                (string) reader[PopularServer.Properties.Name],
+                                (decimal)(double) reader[PopularServer.Properties.AverageMatchesPerDay]));
+                        }
+                        reader.Close();
+                    }
+                    transaction.Commit();
+                }
+                connection.Close();
+            }
+            
+            return popularServers;
+        }
+
         private List<Scoreboard> GetScoreboardForPlayerStat(string name,
             SQLiteConnection connection,
             SQLiteTransaction transaction
@@ -330,7 +456,7 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
             return scoreboards;
         }
 
-        private DateTime? GetLastMatchDateTime(SQLiteConnection connection, SQLiteTransaction transaction)
+        private static DateTime? GetLastMatchDateTime(SQLiteConnection connection, SQLiteTransaction transaction)
         {
             var query = $@"
 SELECT {Match.Properties.Timestamp} FROM {Tables.Match}
