@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Kontur.GameStats.Server.Domains;
@@ -10,49 +11,50 @@ namespace Kontur.GameStats.Server.Tests
     [TestFixture]
     public class Database_Should
     {
-        private Database Database { get; } = new Database("Test.sqlite");
+        private Database database;
         [SetUp]
         public void DatabaseInit()
         {
-            Database.DropAll();
-            Database.Init();
+            database = new Database("C:\\Test.sqlite");
+            //database.DropAll();
+            database.Init();
         }
 
         [TearDown]
         public void DatabaseDrop()
         {
-            //Database.DropAll();
+            //database.DropAll();
         }
 
         [Test]
         public void Success_WhenInsertServer()
         {
-            Assert.DoesNotThrow(() => Database.InsertOrUpdateServer(ExampleDomains.Server));
+            Assert.DoesNotThrow(() => database.InsertOrUpdateServer(ExampleDomains.Server));
         }
 
         [Test]
         public void Success_InsertTwice_OneServer()
         {
-            Assert.DoesNotThrow(() => Database.InsertOrUpdateServer(ExampleDomains.Server));
-            Assert.DoesNotThrow(() => Database.InsertOrUpdateServer(ExampleDomains.Server));
+            Assert.DoesNotThrow(() => database.InsertOrUpdateServer(ExampleDomains.Server));
+            Assert.DoesNotThrow(() => database.InsertOrUpdateServer(ExampleDomains.Server));
         }
 
         [Test]
         public void Exception_WhenInsertServer_Null()
         {
-            Assert.Throws<NullReferenceException>(() => Database.InsertOrUpdateServer(null));
+            Assert.Throws<NullReferenceException>(() => database.InsertOrUpdateServer(null));
         }
 
         [Test]
         public void Exception_WhenInsertServer_EndpointNull()
         {
-            Assert.Throws<ArgumentException>(() => Database.InsertOrUpdateServer(new Domains.Server(null, null)));
+            Assert.Throws<ArgumentException>(() => database.InsertOrUpdateServer(new Domains.Server(null, null)));
         }
 
         [Test]
         public void False_WhenInsertMatch_ForNotAdvertiseServer()
         {
-            var isInsertMatch = Database.TryInsertOrIgnoreMatch(ExampleDomains.Match);
+            var isInsertMatch = database.TryInsertOrIgnoreMatch(ExampleDomains.Match);
 
             Assert.False(isInsertMatch);
         }
@@ -60,9 +62,9 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void True_WhenInsertMatch_ForAdvertiseServer()
         {
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
 
-            var isInsertMatch = Database.TryInsertOrIgnoreMatch(ExampleDomains.Match);
+            var isInsertMatch = database.TryInsertOrIgnoreMatch(ExampleDomains.Match);
 
             Assert.True(isInsertMatch);
         }
@@ -70,7 +72,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void Null_WhenGetServerInfo_ForNotAdvertiseServer()
         {
-            var serverInfo = Database.GetServerInfo("example.com-1234");
+            var serverInfo = database.GetServerInfo("example.com-1234");
 
             Assert.Null(serverInfo);
         }
@@ -79,9 +81,9 @@ namespace Kontur.GameStats.Server.Tests
         public void Success_WhenGetServerInfo_ForAdvertiseServer()
         {
             var server = ExampleDomains.Server;
-            Database.InsertOrUpdateServer(server);
+            database.InsertOrUpdateServer(server);
 
-            var actualServerInfo = Database.GetServerInfo(server.Endpoint);
+            var actualServerInfo = database.GetServerInfo(server.Endpoint);
 
             Assert.AreEqual(server.Info, actualServerInfo);
         }
@@ -89,7 +91,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void EmptyList_WhenGetAllServers_ForEmptyDatabase()
         {
-            var servers = Database.GetAllServers();
+            var servers = database.GetAllServers();
 
             Assert.AreEqual(0, servers.Count);
         }
@@ -97,9 +99,9 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void ListCount1_WhenGetAllServers_For1ServerInDatabase()
         {
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
 
-            var servers = Database.GetAllServers();
+            var servers = database.GetAllServers();
 
             Assert.AreEqual(1, servers.Count);
         }
@@ -107,7 +109,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void Null_WhenGetMatchResult_ForEmptyDatabse()
         {
-            var matchResult = Database.GetMatchResult("example-1234", DateTime.Now);
+            var matchResult = database.GetMatchResult("example-1234", DateTime.Now);
 
             Assert.Null(matchResult);
         }
@@ -117,10 +119,10 @@ namespace Kontur.GameStats.Server.Tests
         {
             var server = ExampleDomains.Server;
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var actualMatchResult = Database.GetMatchResult(match.Server, match.Timestamp);
+            var actualMatchResult = database.GetMatchResult(match.Server, match.Timestamp);
 
             Assert.AreEqual(match.Results, actualMatchResult);
         }
@@ -128,7 +130,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void EmptyServerStat_WhenGetServerStat_ForEmptyDatabase()
         {
-            var actualServerStat = Database.GetServerStat(ExampleDomains.Server.Endpoint);
+            var actualServerStat = database.GetServerStat(ExampleDomains.Server.Endpoint);
 
             Assert.AreEqual(new ServerStat(), actualServerStat);
         }
@@ -138,10 +140,10 @@ namespace Kontur.GameStats.Server.Tests
         {
             var server = ExampleDomains.Server;
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            Assert.DoesNotThrow(() => Database.GetServerStat(server.Endpoint));
+            Assert.DoesNotThrow(() => database.GetServerStat(server.Endpoint));
         }
 
         [Test]
@@ -152,10 +154,10 @@ namespace Kontur.GameStats.Server.Tests
             var randomData = new RandomData(countServers);
             var server = randomData.GetRandomServer();
             var matches = randomData.GetUniqueRandomMatchesForServer(server, countMatches);
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(m => database.TryInsertOrIgnoreMatch(m));
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
 
             Assert.AreEqual(countMatches, actualServerStat.TotalMatchesPlayed);
         }
@@ -168,10 +170,10 @@ namespace Kontur.GameStats.Server.Tests
             var randomData = new RandomData(countServers);
             var server = randomData.GetRandomServer();
             var matches = randomData.GetUniqueRandomMatchesForServer(server, countMatches);
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(m => database.TryInsertOrIgnoreMatch(m));
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
             var expectedMaximumMatchesPerDay = matches.GroupBy(i => i.Timestamp.Date).Max(i => i.Count());
 
             Assert.AreEqual(expectedMaximumMatchesPerDay, actualServerStat.MaximumMatchesPerDay);
@@ -185,10 +187,10 @@ namespace Kontur.GameStats.Server.Tests
             var randomData = new RandomData(countServers);
             var server = randomData.GetRandomServer();
             var matches = randomData.GetUniqueRandomMatchesForServer(server, countMatches);
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(m => database.TryInsertOrIgnoreMatch(m));
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
             var expectedAverageMatchesPerDay = (decimal)matches.Count /
                                                ((matches.Max(i => i.Timestamp).Date - matches.Min(i => i.Timestamp).Date)
                                                 .Days + 1);
@@ -204,10 +206,10 @@ namespace Kontur.GameStats.Server.Tests
             var randomData = new RandomData(countServers);
             var server = randomData.GetRandomServer();
             var matches = randomData.GetUniqueRandomMatchesForServer(server, countMatches);
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(m => database.TryInsertOrIgnoreMatch(m));
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
             var expectedMaximumPopulation = matches.Max(i => i.Results.Scoreboard.Count);
 
             Assert.AreEqual(expectedMaximumPopulation, actualServerStat.MaximumPopulation);
@@ -221,10 +223,10 @@ namespace Kontur.GameStats.Server.Tests
             var randomData = new RandomData(countServers);
             var server = randomData.GetRandomServer();
             var matches = randomData.GetUniqueRandomMatchesForServer(server, countMatches);
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(m => Database.TryInsertOrIgnoreMatch(m));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(m => database.TryInsertOrIgnoreMatch(m));
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
 
             var expectedAveragePopulation = (decimal)matches.Sum(i => i.Results.Scoreboard.Count) / matches.Count;
             Assert.AreEqual(expectedAveragePopulation, actualServerStat.AveragePopulation);
@@ -238,11 +240,11 @@ namespace Kontur.GameStats.Server.Tests
             var server = randomData.GetRandomServer();
             var match1 = randomData.GetRandomMatchForServer(server, DateTime.Parse("2017-01-22T23:59:59Z"));
             var match2 = randomData.GetRandomMatchForServer(server, DateTime.Parse("2017-01-23T00:00:00Z"));
-            Database.InsertOrUpdateServer(server);
-            Database.TryInsertOrIgnoreMatch(match1);
-            Database.TryInsertOrIgnoreMatch(match2);
+            database.InsertOrUpdateServer(server);
+            database.TryInsertOrIgnoreMatch(match1);
+            database.TryInsertOrIgnoreMatch(match2);
 
-            var actualServerStat = Database.GetServerStat(server.Endpoint);
+            var actualServerStat = database.GetServerStat(server.Endpoint);
 
             Assert.AreEqual(1, actualServerStat.MaximumMatchesPerDay);
         }
@@ -255,12 +257,12 @@ namespace Kontur.GameStats.Server.Tests
             var servers = randomData.GetServers();
             var match1 = randomData.GetRandomMatchForServer(servers[0], DateTime.Parse("2017-01-22T12:00:00Z"));
             var match2 = randomData.GetRandomMatchForServer(servers[1], DateTime.Parse("2017-01-23T12:00:00Z"));
-            servers.ForEach(s => Database.InsertOrUpdateServer(s));
-            Database.TryInsertOrIgnoreMatch(match1);
-            Database.TryInsertOrIgnoreMatch(match2);
+            servers.ForEach(s => database.InsertOrUpdateServer(s));
+            database.TryInsertOrIgnoreMatch(match1);
+            database.TryInsertOrIgnoreMatch(match2);
 
-            var actualServerStat1 = Database.GetServerStat(servers[0].Endpoint);
-            var actualServerStat2 = Database.GetServerStat(servers[1].Endpoint);
+            var actualServerStat1 = database.GetServerStat(servers[0].Endpoint);
+            var actualServerStat2 = database.GetServerStat(servers[1].Endpoint);
 
             Assert.AreEqual(0.5, actualServerStat1.AverageMatchesPerDay);
             Assert.AreEqual(1, actualServerStat2.AverageMatchesPerDay);
@@ -269,7 +271,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void EmptyPlayerStat_WhenGetPlayerStat_ForEmptyDatabase()
         {
-            var playerStat = Database.GetPlayerStat("player");
+            var playerStat = database.GetPlayerStat("player");
 
             Assert.AreEqual(new PlayerStat(), playerStat);
         }
@@ -278,10 +280,10 @@ namespace Kontur.GameStats.Server.Tests
         public void TotalMatchesPlayer1_WhenGetPlayerStat_ForOneMatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard.First().Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard.First().Name);
 
             Assert.AreEqual(1, playerStat.TotalMatchesPlayed);
         }
@@ -290,10 +292,10 @@ namespace Kontur.GameStats.Server.Tests
         public void TotalMatchesWon1_WhenGetPlayerStat_ForWinnerInOneMatch()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard.First().Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard.First().Name);
 
             Assert.AreEqual(1, playerStat.TotalMatchesWon);
         }
@@ -302,10 +304,10 @@ namespace Kontur.GameStats.Server.Tests
         public void TotalMatchesWon0_WhenGetPlayerStat_ForLoserInOneMatch()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(0, playerStat.TotalMatchesWon);
         }
@@ -314,10 +316,10 @@ namespace Kontur.GameStats.Server.Tests
         public void AverageScoreboardPercent100_WhenGetPlayerStat_ForWinnerInOneMatch()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard.First().Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard.First().Name);
 
             Assert.AreEqual(100, playerStat.AverageScoreboardPercent);
         }
@@ -326,10 +328,10 @@ namespace Kontur.GameStats.Server.Tests
         public void AverageScoreboardPercent0_WhenGetPlayerStat_ForLoserInOneMatch()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(0, playerStat.AverageScoreboardPercent);
         }
@@ -338,10 +340,10 @@ namespace Kontur.GameStats.Server.Tests
         public void FavoriteGameMode_WhenGetPlayerStat_ForOneMatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(match.Results.GameMode, playerStat.FavoriteGameMode);
         }
@@ -350,10 +352,10 @@ namespace Kontur.GameStats.Server.Tests
         public void FavoriteServer_WhenGetPlayerStat_ForOneMatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(match.Server, playerStat.FavoriteServer);
         }
@@ -362,10 +364,10 @@ namespace Kontur.GameStats.Server.Tests
         public void UniqueServers_WhenGetPlayerStat_ForOneMatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(1, playerStat.UniqueServers);
         }
@@ -374,10 +376,10 @@ namespace Kontur.GameStats.Server.Tests
         public void LastMatchPlayed_WhenGetPlayerStat_ForOneMatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[1].Name);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[1].Name);
 
             Assert.AreEqual(match.Timestamp.ToUniversalTime(), playerStat.LastMatchPlayed);
         }
@@ -388,10 +390,10 @@ namespace Kontur.GameStats.Server.Tests
             var data = new RandomData(10);
             var servers = data.GetServers();
             var matches = servers.SelectMany(i => data.GetUniqueRandomMatchesForServer(i, 10, 10)).ToList();
-            servers.ForEach(i => Database.InsertOrUpdateServer(i));
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            servers.ForEach(i => database.InsertOrUpdateServer(i));
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
 
-            Assert.DoesNotThrow(() => Database.GetPlayerStat(matches[0].Results.Scoreboard[1].Name));
+            Assert.DoesNotThrow(() => database.GetPlayerStat(matches[0].Results.Scoreboard[0].Name));
         }
 
         [Test]
@@ -401,9 +403,9 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var match = data.GetRandomMatchForServer(server, DateTime.Now);
             
-            Database.InsertOrUpdateServer(server);
-            Database.TryInsertOrIgnoreMatch(match);
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[0].Name);
+            database.InsertOrUpdateServer(server);
+            database.TryInsertOrIgnoreMatch(match);
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[0].Name);
 
             Assert.AreEqual(100, playerStat.AverageScoreboardPercent);
         }
@@ -412,10 +414,10 @@ namespace Kontur.GameStats.Server.Tests
         public void IgnoreCase_WhenGetPlayerStat_ForDifferentCasePlayerName()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
 
-            var playerStat = Database.GetPlayerStat(match.Results.Scoreboard[0].Name.ToUpper());
+            var playerStat = database.GetPlayerStat(match.Results.Scoreboard[0].Name.ToUpper());
 
             Assert.AreEqual(1, playerStat.TotalMatchesPlayed);
         }
@@ -424,10 +426,10 @@ namespace Kontur.GameStats.Server.Tests
         public void Success_WhenGetRecentMatches_For1MatchInDatabase()
         {
             var match = ExampleDomains.Match;
-            Database.InsertOrUpdateServer(ExampleDomains.Server);
-            Database.TryInsertOrIgnoreMatch(match);
+            database.InsertOrUpdateServer(ExampleDomains.Server);
+            database.TryInsertOrIgnoreMatch(match);
             
-            var matches = Database.GetRecentMatches(5);
+            var matches = database.GetRecentMatches(5);
 
             Assert.AreEqual(1, matches.Count);
             Assert.AreEqual(match, matches[0]);
@@ -440,10 +442,10 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var matches = data.GetUniqueRandomMatchesForServer(server, 10);
             
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
             var expectedMatches = matches.OrderByDescending(i => i.Timestamp).Take(5).ToList();
-            var actualMatches = Database.GetRecentMatches(5);
+            var actualMatches = database.GetRecentMatches(5);
             
             Assert.AreEqual(5, actualMatches.Count);
             Assert.True(expectedMatches.SequenceEqual(actualMatches));
@@ -452,7 +454,7 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void PlayersCount0_WhenGetBestPlayers_ForEmptyDatabase()
         {
-            var actualBestPlayers = Database.GetBestPlayers(1);
+            var actualBestPlayers = database.GetBestPlayers(1);
 
             Assert.AreEqual(0, actualBestPlayers.Count);
         }
@@ -464,9 +466,9 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var matches = data.GetUniqueRandomMatchesForServer(server, 9);
 
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
-            var actualBestPlayers = Database.GetBestPlayers(1);
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = database.GetBestPlayers(1);
 
             Assert.AreEqual(0, actualBestPlayers.Count);
         }
@@ -478,9 +480,9 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var matches = data.GetUniqueRandomMatchesForServer(server, 10);
 
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
-            var actualBestPlayers = Database.GetBestPlayers(1);
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = database.GetBestPlayers(1);
 
             Assert.AreEqual(1, actualBestPlayers.Count);
         }
@@ -492,9 +494,9 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var matches = data.GetUniqueRandomMatchesForServer(server, 100);
 
-            Database.InsertOrUpdateServer(server);
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
-            var actualBestPlayers = Database.GetBestPlayers(5);
+            database.InsertOrUpdateServer(server);
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
+            var actualBestPlayers = database.GetBestPlayers(5);
 
             Assert.AreNotEqual(0, actualBestPlayers.Count);
         }
@@ -505,8 +507,8 @@ namespace Kontur.GameStats.Server.Tests
             var data = new RandomData(1);
             var server = data.GetRandomServer();
 
-            Database.InsertOrUpdateServer(server);
-            var actualPopularServers = Database.GetPopularServers(5);
+            database.InsertOrUpdateServer(server);
+            var actualPopularServers = database.GetPopularServers(5);
 
             Assert.AreEqual(0, actualPopularServers.Count);
         }
@@ -517,10 +519,10 @@ namespace Kontur.GameStats.Server.Tests
             var data = new RandomData(5);
             var servers = data.GetServers();
             var matches = servers.SelectMany(i => data.GetUniqueRandomMatchesForServer(i, 1)).ToList();
-            servers.ForEach(i => Database.InsertOrUpdateServer(i));
-            matches.ForEach(i => Database.TryInsertOrIgnoreMatch(i));
+            servers.ForEach(i => database.InsertOrUpdateServer(i));
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
 
-            var actualPopularServers = Database.GetPopularServers(5);
+            var actualPopularServers = database.GetPopularServers(5);
 
             Assert.AreEqual(5, actualPopularServers.Count);
         }
@@ -532,28 +534,40 @@ namespace Kontur.GameStats.Server.Tests
             var server = data.GetRandomServer();
             var match1 = data.GetRandomMatchForServer(server, DateTime.Now);
             var match2 = data.GetRandomMatchForServer(server, DateTime.Now.AddDays(1));
-            Database.InsertOrUpdateServer(server);
-            Database.TryInsertOrIgnoreMatch(match1);
-            Database.TryInsertOrIgnoreMatch(match2);
+            database.InsertOrUpdateServer(server);
+            database.TryInsertOrIgnoreMatch(match1);
+            database.TryInsertOrIgnoreMatch(match2);
 
-            var actualPopularServers = Database.GetPopularServers(1);
+            var actualPopularServers = database.GetPopularServers(1);
 
             Assert.AreEqual(1m, actualPopularServers[0].AverageMatchesPerDay);
         }
 
-        //[Test]
-        //public void FillRandomData()
-        //{
-        //    var data = new RandomData(10000, 10, 10, 100000);
-        //    var servers = data.GetServers();
-        //    servers.ForEach(i => Database.InsertOrUpdateServer(i));
-        //    for(var i = 0; i < 100000; i++)
-        //    {
-        //        foreach(var match in data.GetUniqueRandomMatchesForServer(data.GetRandomServer(), 100, 14))
-        //        {
-        //            Database.TryInsertOrIgnoreMatch(match);
-        //        }
-        //    }
-        //}
+        [Test]
+        public void FillRandomData()
+        {
+            var data = new RandomData(100, 10, 10, 1000);
+            var servers = data.GetServers();
+            servers.ForEach(i =>
+            {
+                var timer = new Stopwatch();
+                timer.Start();
+                database.InsertOrUpdateServer(i);
+                data.GetUniqueRandomMatchesForServer(i, 5, 14).ForEach(ii => database.TryInsertOrIgnoreMatch(ii));
+                Console.WriteLine(timer.Elapsed);
+            });
+        }
+
+        [Test]
+        public void GetAllServers()
+        {
+                var timer = new Stopwatch();
+                timer.Start();
+            var servers = database.GetAllServers();
+                Console.WriteLine(timer.Elapsed);
+            timer.Restart();
+            var matches = database.GetRecentMatches(50);
+                Console.WriteLine(timer.Elapsed);
+        }
     }
 }
