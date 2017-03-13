@@ -150,7 +150,7 @@ SELECT {Domains.Server.Properties.Endpoint}, {ServerInfo.Properties.Name}, {Serv
 FROM {Tables.Server}";
                     var command = new SQLiteCommand(query, connection, transaction);
                     var reader = command.ExecuteReader();
-                    if (reader.Read())
+                    while (reader.Read())
                     {
                         servers.Add(new Domains.Server((string) reader[Domains.Server.Properties.Endpoint],
                             GetServerInfoFromReader(reader)));
