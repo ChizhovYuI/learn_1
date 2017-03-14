@@ -1,12 +1,15 @@
 ﻿using System;
+using Kontur.GameStats.Server.Inerfaces;
+using Newtonsoft.Json;
 
 namespace Kontur.GameStats.Server.Domains
 {
-    public class PlayerStat
+    public class PlayerStat : ICacheable
     {
         public PlayerStat() { }
 
         public PlayerStat(
+            string name,
             int totalMatchesPlayed,
             int totalMatchesWon,
             string favoriteServer,
@@ -18,6 +21,7 @@ namespace Kontur.GameStats.Server.Domains
             DateTime lastMatchPlayed,
             decimal killToDeathRatio)
         {
+            Name = name;
             TotalMatchesPlayed = totalMatchesPlayed;
             TotalMatchesWon = totalMatchesWon;
             FavoriteServer = favoriteServer;
@@ -29,6 +33,12 @@ namespace Kontur.GameStats.Server.Domains
             LastMatchPlayed = lastMatchPlayed;
             KillToDeathRatio = killToDeathRatio;
         }
+
+        [JsonIgnore]
+        public string Name { get; }
+
+        [JsonIgnore]
+        public string Key => Name?.ToLower();
 
         public int TotalMatchesPlayed { get; }
 

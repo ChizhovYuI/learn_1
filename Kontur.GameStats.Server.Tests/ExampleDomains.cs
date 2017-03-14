@@ -68,6 +68,7 @@ namespace Kontur.GameStats.Server.Tests
             "}";
 
         public static readonly ServerStat ServerStat = new ServerStat(
+            null,
             100500,
             33,
             (decimal)24.45624,
@@ -101,6 +102,7 @@ namespace Kontur.GameStats.Server.Tests
             "}";
 
         public static readonly PlayerStat PlayerStat = new PlayerStat(
+            null,
             100500,
             1000,
             "62.210.26.88-1337",

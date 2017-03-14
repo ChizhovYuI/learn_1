@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Kontur.GameStats.Server.Domains;
 using Kontur.GameStats.Server.Utils;
 using NUnit.Framework;
@@ -16,7 +17,7 @@ namespace Kontur.GameStats.Server.Tests
         public void DatabaseInit()
         {
             database = new Database("C:\\Test.sqlite");
-            //database.DropAll();
+            database.DropAll();
             database.Init();
         }
 
@@ -97,13 +98,25 @@ namespace Kontur.GameStats.Server.Tests
         }
 
         [Test]
-        public void ListCount1_WhenGetAllServers_For1ServerInDatabase()
+        public void ServersCount1_WhenGetAllServers_For1ServerInDatabase()
         {
             database.InsertOrUpdateServer(ExampleDomains.Server);
 
             var servers = database.GetAllServers();
 
             Assert.AreEqual(1, servers.Count);
+        }
+
+        [Test]
+        public void ServersCount2_WhenGetAllServers_For2ServersInDatabase()
+        {
+            var data = new RandomData(2);
+            var servers = data.GetServers();
+            servers.ForEach(s => database.InsertOrUpdateServer(s));
+
+            var actualServers = database.GetAllServers();
+
+            Assert.AreEqual(servers.Count, actualServers.Count);
         }
 
         [Test]
@@ -546,28 +559,33 @@ namespace Kontur.GameStats.Server.Tests
         [Test]
         public void FillRandomData()
         {
-            var data = new RandomData(100, 10, 10, 1000);
+            var data = new RandomData(10, 10, 10, 1000);
             var servers = data.GetServers();
-            servers.ForEach(i =>
+            var total = new Stopwatch();
+            total.Start();
+            Parallel.ForEach(servers, i =>
             {
                 var timer = new Stopwatch();
                 timer.Start();
                 database.InsertOrUpdateServer(i);
-                data.GetUniqueRandomMatchesForServer(i, 5, 14).ForEach(ii => database.TryInsertOrIgnoreMatch(ii));
-                Console.WriteLine(timer.Elapsed);
+                data.GetUniqueRandomMatchesForServer(i, 1, 14).ForEach(ii => database.TryInsertOrIgnoreMatch(ii));
+                var allServers = database.GetAllServers();
+                Console.WriteLine($"{allServers.Count}: {timer.Elapsed}");
             });
+
+            Console.WriteLine("Всего: " + total.Elapsed);
         }
 
         [Test]
         public void GetAllServers()
         {
-                var timer = new Stopwatch();
-                timer.Start();
+            var timer = new Stopwatch();
+            timer.Start();
             var servers = database.GetAllServers();
-                Console.WriteLine(timer.Elapsed);
+            Console.WriteLine(timer.Elapsed);
             timer.Restart();
             var matches = database.GetRecentMatches(50);
-                Console.WriteLine(timer.Elapsed);
+            Console.WriteLine(timer.Elapsed);
         }
     }
 }

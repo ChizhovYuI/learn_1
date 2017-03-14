@@ -15,7 +15,8 @@ namespace Kontur.GameStats.Server.Utils
         public Database(string dataSource)
         {
             connectionString =
-                new SQLiteConnectionStringBuilder {
+                new SQLiteConnectionStringBuilder
+                {
                     DataSource = dataSource,
                     Version = 3,
                     SyncMode = SynchronizationModes.Normal,
@@ -152,7 +153,7 @@ FROM {Tables.Server}";
                     var reader = command.ExecuteReader();
                     while (reader.Read())
                     {
-                        servers.Add(new Domains.Server((string) reader[Domains.Server.Properties.Endpoint],
+                        servers.Add(new Domains.Server((string)reader[Domains.Server.Properties.Endpoint],
                             GetServerInfoFromReader(reader)));
                     }
 
@@ -188,12 +189,12 @@ LIMIT 1";
                     var reader = command.ExecuteReader();
                     if (reader.Read())
                     {
-                        matchResult = new MatchResult((string) reader[MatchResult.Properties.Map],
-                            (string) reader[MatchResult.Properties.GameMode],
-                            (int) reader[MatchResult.Properties.FragLimit],
-                            (int) reader[MatchResult.Properties.TimeLimit],
-                            (decimal) reader[MatchResult.Properties.TimeElapsed], new List<Scoreboard>(),
-                            (long) reader[MatchResult.Properties.Id]);
+                        matchResult = new MatchResult((string)reader[MatchResult.Properties.Map],
+                            (string)reader[MatchResult.Properties.GameMode],
+                            (int)reader[MatchResult.Properties.FragLimit],
+                            (int)reader[MatchResult.Properties.TimeLimit],
+                            (decimal)reader[MatchResult.Properties.TimeElapsed], new List<Scoreboard>(),
+                            (long)reader[MatchResult.Properties.Id]);
                         FillScoreboard(matchResult, connection, transaction);
                     }
                     reader.Close();
@@ -206,6 +207,10 @@ LIMIT 1";
 
         public ServerStat GetServerStat(string endpoint)
         {
+            ServerStat serverStat = null;
+            if (serverStatCache.TryGetItem(endpoint, ref serverStat))
+                return serverStat;
+
             DateTime? lastMatchDate;
             List<Match> matches = null;
             using (var connection = new SQLiteConnection(connectionString))
@@ -214,33 +219,55 @@ LIMIT 1";
                 using (var transaction = connection.BeginTransaction())
                 {
                     lastMatchDate = GetLastMatchDateTime(connection, transaction);
-                    if (lastMatchDate != null) { matches = GetMatchesForServerStat(endpoint, connection, transaction); }
+                    if (lastMatchDate != null)
+                    {
+                        matches = GetMatchesForServerStat(endpoint, connection, transaction);
+                    }
                     transaction.Commit();
                 }
                 connection.Close();
             }
-            if (matches == null || matches.Count == 0) return new ServerStat();
+            if (matches == null || matches.Count == 0)
+                return new ServerStat();
 
             var firstMatchDateTime = matches.Min(i => i.Timestamp);
             var countDays = (lastMatchDate.Value.Date - firstMatchDateTime.Date).Days + 1;
             var totalMatchesPlayed = matches.Count;
             var maximumMatchesPerDay = matches.GroupBy(i => i.Timestamp.Date).Max(i => i.Count());
-            var averageMatchesPerDay = (decimal) totalMatchesPlayed / countDays;
+            var averageMatchesPerDay = (decimal)totalMatchesPlayed / countDays;
             var maximumPopulation = matches.Max(i => i.Results.Population);
-            var averagePopulation = (decimal) matches.Sum(i => i.Results.Population) / totalMatchesPlayed;
+            var averagePopulation = (decimal)matches.Sum(i => i.Results.Population) / totalMatchesPlayed;
             var top5GameModes =
-                matches.GroupBy(i => i.Results.GameMode).OrderByDescending(i => i.Count()).ThenBy(i => i.Key).Take(5)
-                    .Select(i => i.Key).ToArray();
+                matches.GroupBy(i => i.Results.GameMode)
+                       .OrderByDescending(i => i.Count())
+                       .ThenBy(i => i.Key)
+                       .Take(5)
+                       .Select(i => i.Key).ToArray();
             var top5Maps =
-                matches.GroupBy(i => i.Results.Map).OrderByDescending(i => i.Count()).ThenBy(i => i.Key).Take(5).Select(
-                    i => i.Key).ToArray();
-            var serverStat = new ServerStat(totalMatchesPlayed, maximumMatchesPerDay, averageMatchesPerDay,
-                maximumPopulation, averagePopulation, top5GameModes, top5Maps);
+                matches.GroupBy(i => i.Results.Map)
+                       .OrderByDescending(i => i.Count())
+                       .ThenBy(i => i.Key)
+                       .Take(5)
+                       .Select(
+                           i => i.Key).ToArray();
+            serverStat = new ServerStat(endpoint,
+                totalMatchesPlayed,
+                maximumMatchesPerDay,
+                averageMatchesPerDay,
+                maximumPopulation,
+                averagePopulation,
+                top5GameModes,
+                top5Maps);
+            serverStatCache.Insert(serverStat);
             return serverStat;
         }
 
         public PlayerStat GetPlayerStat(string name)
         {
+            PlayerStat playerStat = null;
+            if (playerStatCache.TryGetItem(name, ref playerStat))
+                return playerStat;
+
             DateTime? lastMatchDate;
             List<Scoreboard> scoreboards = null;
             using (var connection = new SQLiteConnection(connectionString))
@@ -249,29 +276,32 @@ LIMIT 1";
                 using (var transaction = connection.BeginTransaction())
                 {
                     lastMatchDate = GetLastMatchDateTime(connection, transaction);
-                    if (lastMatchDate != null) {
+                    if (lastMatchDate != null)
+                    {
                         scoreboards = GetScoreboardForPlayerStat(name, connection, transaction);
                     }
                     transaction.Commit();
                 }
                 connection.Close();
             }
-            if (scoreboards == null || scoreboards.Count == 0) return new PlayerStat();
+            if (scoreboards == null || scoreboards.Count == 0)
+                return new PlayerStat();
 
-            var playerStat = GetPlayerStat(lastMatchDate.Value, scoreboards);
+            playerStat = GetPlayerStat(lastMatchDate.Value, scoreboards, name);
+            playerStatCache.Insert(playerStat);
             return playerStat;
         }
 
         public List<Match> GetRecentMatches(int count)
         {
-            Monitor.Enter(RecentMathcesCash.Locker);
+            Monitor.Enter(recentMathcesCache.Locker);
             try
             {
                 var matches = new List<Match>();
-                if (count <= 0) 
+                if (count <= 0)
                     return matches;
 
-                if (RecentMathcesCash.TryGetItems(count, ref matches)) 
+                if (recentMathcesCache.TryGetItems(count, ref matches))
                     return matches;
 
                 using (var connection = new SQLiteConnection(connectionString))
@@ -291,45 +321,46 @@ SELECT
 {MatchResult.Properties.TimeElapsed}
 FROM {Tables.Match}
 ORDER BY {Tables.Match}.{Match.Properties.Timestamp} DESC
-LIMIT {MaxCountItemsInReport}";
+LIMIT {maxCountItemsInReport}";
                         var command = new SQLiteCommand(query, connection, transaction);
                         var reader = command.ExecuteReader();
                         while (reader.Read())
                         {
-                            matches.Add(new Match((string) reader[Match.Properties.Server],
-                                (DateTime) reader[Match.Properties.Timestamp],
-                                new MatchResult((string) reader[MatchResult.Properties.Map],
-                                    (string) reader[MatchResult.Properties.GameMode],
-                                    (int) reader[MatchResult.Properties.FragLimit],
-                                    (int) reader[MatchResult.Properties.TimeLimit],
-                                    (decimal) reader[MatchResult.Properties.TimeElapsed], new List<Scoreboard>(),
-                                    (long) reader[MatchResult.Properties.Id])));
+                            matches.Add(new Match((string)reader[Match.Properties.Server],
+                                (DateTime)reader[Match.Properties.Timestamp],
+                                new MatchResult((string)reader[MatchResult.Properties.Map],
+                                    (string)reader[MatchResult.Properties.GameMode],
+                                    (int)reader[MatchResult.Properties.FragLimit],
+                                    (int)reader[MatchResult.Properties.TimeLimit],
+                                    (decimal)reader[MatchResult.Properties.TimeElapsed], new List<Scoreboard>(),
+                                    (long)reader[MatchResult.Properties.Id])));
                         }
                         reader.Close();
                         matches.ForEach(i => FillScoreboard(i.Results, connection, transaction));
-                        
+
                         transaction.Commit();
                     }
                     connection.Close();
                 }
-                RecentMathcesCash.Update(matches);
+                recentMathcesCache.Update(matches);
                 return matches.Take(count).ToList();
             }
-            finally {
-                Monitor.Exit(RecentMathcesCash.Locker);
+            finally
+            {
+                Monitor.Exit(recentMathcesCache.Locker);
             }
         }
 
         public List<BestPlayer> GetBestPlayers(int count)
         {
-            Monitor.Enter(BestPlayersCash.Locker);
+            Monitor.Enter(bestPlayersCache.Locker);
             try
             {
                 var bestPlayers = new List<BestPlayer>();
-                if (count <= 0) 
+                if (count <= 0)
                     return bestPlayers;
 
-                if(BestPlayersCash.TryGetItems(count, ref bestPlayers))
+                if (bestPlayersCache.TryGetItems(count, ref bestPlayers))
                     return bestPlayers;
 
                 using (var connection = new SQLiteConnection(connectionString))
@@ -344,13 +375,13 @@ FROM {Tables.Scoreboard}
 GROUP BY {Scoreboard.Properties.SearchName}
 HAVING SUM({Scoreboard.Properties.Deaths}) > 0 AND COUNT({Scoreboard.Properties.MatchId}) >= 10
 ORDER BY {BestPlayer.Properties.KillToDeathRatio} DESC
-LIMIT {MaxCountItemsInReport}";
+LIMIT {maxCountItemsInReport}";
                         var command = new SQLiteCommand(query, connection, transaction);
                         var reader = command.ExecuteReader();
                         while (reader.Read())
                         {
-                            bestPlayers.Add(new BestPlayer((string) reader[Scoreboard.Properties.Name],
-                                (decimal) (double) reader[BestPlayer.Properties.KillToDeathRatio]));
+                            bestPlayers.Add(new BestPlayer((string)reader[Scoreboard.Properties.Name],
+                                (decimal)(double)reader[BestPlayer.Properties.KillToDeathRatio]));
                         }
                         reader.Close();
 
@@ -358,19 +389,19 @@ LIMIT {MaxCountItemsInReport}";
                     }
                     connection.Close();
                 }
-                BestPlayersCash.Update(bestPlayers);
+                bestPlayersCache.Update(bestPlayers);
 
                 return bestPlayers.Take(count).ToList();
             }
             finally
             {
-                Monitor.Exit(BestPlayersCash.Locker);
+                Monitor.Exit(bestPlayersCache.Locker);
             }
         }
 
         public List<PopularServer> GetPopularServers(int count)
         {
-            Monitor.Enter(PopulareServersCash.Locker);
+            Monitor.Enter(populareServersCache.Locker);
             try
             {
                 var popularServers = new List<PopularServer>();
@@ -396,15 +427,15 @@ LEFT JOIN {Tables.Match} ON {Tables.Server}.{Domains.Server.Properties.Endpoint}
                                 .Server}
 GROUP BY {Tables.Match}.{Match.Properties.Server}
 ORDER BY {PopularServer.Properties.AverageMatchesPerDay} DESC
-LIMIT {MaxCountItemsInReport}";
+LIMIT {maxCountItemsInReport}";
                             var command = new SQLiteCommand(query, connection, transaction);
                             var reader = command.ExecuteReader();
                             while (reader.Read())
                             {
                                 popularServers.Add(new PopularServer(
-                                    (string) reader[PopularServer.Properties.Endpoint],
-                                    (string) reader[PopularServer.Properties.Name],
-                                    (decimal) (double) reader[PopularServer.Properties.AverageMatchesPerDay]));
+                                    (string)reader[PopularServer.Properties.Endpoint],
+                                    (string)reader[PopularServer.Properties.Name],
+                                    (decimal)(double)reader[PopularServer.Properties.AverageMatchesPerDay]));
                             }
                             reader.Close();
                         }
@@ -412,13 +443,13 @@ LIMIT {MaxCountItemsInReport}";
                     }
                     connection.Close();
                 }
-                PopulareServersCash.Update(popularServers);
+                populareServersCache.Update(popularServers);
 
                 return popularServers.Take(count).ToList();
             }
             finally
             {
-                Monitor.Exit(PopulareServersCash.Locker);
+                Monitor.Exit(populareServersCache.Locker);
             }
         }
 
@@ -448,11 +479,11 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
             var scoreboards = new List<Scoreboard>();
             while (reader.Read())
             {
-                scoreboards.Add(new Scoreboard((int) reader[Scoreboard.Properties.Kills],
-                    (int) reader[Scoreboard.Properties.Deaths], (int) reader[Scoreboard.Properties.Place],
-                    new Match((string) reader[Match.Properties.Server], (DateTime) reader[Match.Properties.Timestamp],
-                        new MatchResult((string) reader[MatchResult.Properties.GameMode],
-                            (int) (long) reader[MatchResult.Properties.Population]))));
+                scoreboards.Add(new Scoreboard((int)reader[Scoreboard.Properties.Kills],
+                    (int)reader[Scoreboard.Properties.Deaths], (int)reader[Scoreboard.Properties.Place],
+                    new Match((string)reader[Match.Properties.Server], (DateTime)reader[Match.Properties.Timestamp],
+                        new MatchResult((string)reader[MatchResult.Properties.GameMode],
+                            (int)(long)reader[MatchResult.Properties.Population]))));
             }
             reader.Close();
             return scoreboards;
@@ -465,7 +496,7 @@ SELECT {Match.Properties.Timestamp} FROM {Tables.Match}
 ORDER BY {Match.Properties.Timestamp} DESC
 LIMIT 1";
             var command = new SQLiteCommand(query, connection, transaction);
-            return (DateTime?) command.ExecuteScalar();
+            return (DateTime?)command.ExecuteScalar();
         }
 
         private static void DropTable(string name, SQLiteConnection connection, SQLiteTransaction transaction)
@@ -477,8 +508,8 @@ LIMIT 1";
 
         private static ServerInfo GetServerInfoFromReader(SQLiteDataReader reader)
         {
-            return new ServerInfo((string) reader[ServerInfo.Properties.Name],
-                JsonConvert.DeserializeObject<string[]>((string) reader[ServerInfo.Properties.GameModes]));
+            return new ServerInfo((string)reader[ServerInfo.Properties.Name],
+                JsonConvert.DeserializeObject<string[]>((string)reader[ServerInfo.Properties.GameModes]));
         }
 
         private static void CreateTableServer(SQLiteConnection connection, SQLiteTransaction transaction)
@@ -600,7 +631,7 @@ INSERT INTO {Tables.Match} (
         {
             var query = "SELECT last_insert_rowid()";
             var command = new SQLiteCommand(query, connection, transaction);
-            return (long) command.ExecuteScalar();
+            return (long)command.ExecuteScalar();
         }
 
         private static void InsertScoreboard(List<Scoreboard> scoreboard, SQLiteConnection connection,
@@ -645,9 +676,9 @@ ORDER BY {Scoreboard.Properties.Place}";
             var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                matchResult.Scoreboard.Add(new Scoreboard((string) reader[Scoreboard.Properties.Name],
-                    (int) reader[Scoreboard.Properties.Frags], (int) reader[Scoreboard.Properties.Kills],
-                    (int) reader[Scoreboard.Properties.Deaths]));
+                matchResult.Scoreboard.Add(new Scoreboard((string)reader[Scoreboard.Properties.Name],
+                    (int)reader[Scoreboard.Properties.Frags], (int)reader[Scoreboard.Properties.Kills],
+                    (int)reader[Scoreboard.Properties.Deaths]));
             }
         }
 
@@ -670,16 +701,16 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
             var matches = new List<Match>();
             while (reader.Read())
             {
-                matches.Add(new Match((DateTime) reader[Match.Properties.Timestamp],
-                    new MatchResult((string) reader[MatchResult.Properties.Map],
-                        (string) reader[MatchResult.Properties.GameMode],
-                        (int) (long) reader[MatchResult.Properties.Population])));
+                matches.Add(new Match((DateTime)reader[Match.Properties.Timestamp],
+                    new MatchResult((string)reader[MatchResult.Properties.Map],
+                        (string)reader[MatchResult.Properties.GameMode],
+                        (int)(long)reader[MatchResult.Properties.Population])));
             }
             reader.Close();
             return matches;
         }
 
-        private static PlayerStat GetPlayerStat(DateTime lastMatchDate, List<Scoreboard> scoreboards)
+        private static PlayerStat GetPlayerStat(DateTime lastMatchDate, List<Scoreboard> scoreboards, string name)
         {
             var firstMatchDateTime = scoreboards.Min(i => i.Match.Timestamp);
             var countDays = (lastMatchDate.Date - firstMatchDateTime.Date).Days + 1;
@@ -697,14 +728,14 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
                         i =>
                             i.Match.Results.Population == 1
                                 ? 100
-                                : (decimal) (i.Match.Results.Population - i.Place) / (i.Match.Results.Population - 1) * 100)
+                                : (decimal)(i.Match.Results.Population - i.Place) / (i.Match.Results.Population - 1) * 100)
                     .Sum() / totalMatchesPlayed;
             var maximumMatchesPerDay = scoreboards.GroupBy(i => i.Match.Timestamp.Date).Max(i => i.Count());
-            var averageMatchesPerDay = (decimal) totalMatchesPlayed / countDays;
+            var averageMatchesPerDay = (decimal)totalMatchesPlayed / countDays;
             var lastMatchPlayed = scoreboards.Max(i => i.Match.Timestamp);
             var totalDeaths = scoreboards.Sum(i => i.Deaths);
-            var killToDeathRatio = totalDeaths > 0 ? (decimal) scoreboards.Sum(i => i.Kills) / totalDeaths : 0;
-            var playerStat = new PlayerStat(totalMatchesPlayed, totalMatchesWon, favoriteServer, uniqueServers,
+            var killToDeathRatio = totalDeaths > 0 ? (decimal)scoreboards.Sum(i => i.Kills) / totalDeaths : 0;
+            var playerStat = new PlayerStat(name, totalMatchesPlayed, totalMatchesWon, favoriteServer, uniqueServers,
                 favoriteGameMode, averageScoreboardPercent, maximumMatchesPerDay, averageMatchesPerDay, lastMatchPlayed,
                 killToDeathRatio);
             return playerStat;
@@ -717,21 +748,25 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
 
         private readonly string connectionString;
 
-        private Cash<Match> RecentMathcesCash = new Cash<Match>(CashTime);
+        private readonly ReportCache<Match> recentMathcesCache = new ReportCache<Match>(cacheTime);
 
-        private Cash<BestPlayer> BestPlayersCash = new Cash<BestPlayer>(CashTime);
+        private readonly ReportCache<BestPlayer> bestPlayersCache = new ReportCache<BestPlayer>(cacheTime);
 
-        private Cash<PopularServer> PopulareServersCash = new Cash<PopularServer>(CashTime);
+        private readonly ReportCache<PopularServer> populareServersCache = new ReportCache<PopularServer>(cacheTime);
+
+        private readonly StatsCache<ServerStat> serverStatCache = new StatsCache<ServerStat>(cacheTime);
+
+        private readonly StatsCache<PlayerStat> playerStatCache = new StatsCache<PlayerStat>(cacheTime);
 
         /// <summary>
         /// Время актуальности кэша в секундах
         /// </summary>
-        private const int CashTime = 60;
+        private const int cacheTime = 59;
 
         /// <summary>
         /// Максимальное количество элементов для вывода в отчеты
         /// </summary>
-        private const int MaxCountItemsInReport = 50;
+        private const int maxCountItemsInReport = 50;
 
         private static class Tables
         {
@@ -740,39 +775,6 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
             public const string Match = "match";
 
             public const string Scoreboard = "scoreboard";
-        }
-
-        private class Cash<T>
-        {
-            private List<T> list;
-
-            private DateTime lastUpdateDateTime;
-
-            private readonly int cashTime;
-            
-            public object Locker = new object();
-
-            public Cash(int cashTime)
-            {
-                this.cashTime = cashTime;
-            }
-
-            public bool TryGetItems(int count, ref List<T> result)
-            {
-                if ((DateTime.Now - lastUpdateDateTime).TotalSeconds < cashTime)
-                {
-                    result = list.Take(count).ToList();
-                    return true;
-                }
-
-                return false;
-            }
-
-            public void Update(List<T> newResult)
-            {
-                list = newResult;
-                lastUpdateDateTime = DateTime.Now;
-            }
         }
     }
 }

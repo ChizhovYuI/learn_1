@@ -1,12 +1,15 @@
 ﻿using System.Linq;
+using Kontur.GameStats.Server.Inerfaces;
+using Newtonsoft.Json;
 
 namespace Kontur.GameStats.Server.Domains
 {
-    public class ServerStat
+    public class ServerStat : ICacheable
     {
         public ServerStat() { }
 
         public ServerStat(
+            string endpoint,
             int totalMatchesPlayed,
             int maximumMatchesPerDay,
             decimal averageMatchesPerDay,
@@ -15,6 +18,7 @@ namespace Kontur.GameStats.Server.Domains
             string[] top5GameModes,
             string[] top5Maps)
         {
+            Endpoint = endpoint;
             TotalMatchesPlayed = totalMatchesPlayed;
             MaximumMatchesPerDay = maximumMatchesPerDay;
             AverageMatchesPerDay = averageMatchesPerDay;
@@ -24,7 +28,13 @@ namespace Kontur.GameStats.Server.Domains
             Top5Maps = top5Maps;
         }
 
-        public int TotalMatchesPlayed { get; set; }
+        [JsonIgnore]
+        public string Endpoint { get; }
+
+        [JsonIgnore]
+        public string Key => Endpoint;
+
+        public int TotalMatchesPlayed { get; }
 
         public int MaximumMatchesPerDay { get; }
 
