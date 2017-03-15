@@ -5,7 +5,6 @@ using Kontur.GameStats.Server.Domains;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Net;
 using System.Threading;
 
 namespace Kontur.GameStats.Server.Utils
@@ -207,8 +206,8 @@ LIMIT 1";
 
         public ServerStat GetServerStat(string endpoint)
         {
-            ServerStat serverStat = null;
-            if (serverStatCache.TryGetItem(endpoint, ref serverStat))
+            ServerStat serverStat;
+            if (serverStatCache.TryGetItem(endpoint, out serverStat))
                 return serverStat;
 
             DateTime? lastMatchDate;
@@ -264,8 +263,8 @@ LIMIT 1";
 
         public PlayerStat GetPlayerStat(string name)
         {
-            PlayerStat playerStat = null;
-            if (playerStatCache.TryGetItem(name, ref playerStat))
+            PlayerStat playerStat;
+            if (playerStatCache.TryGetItem(name, out playerStat))
                 return playerStat;
 
             DateTime? lastMatchDate;
@@ -294,14 +293,14 @@ LIMIT 1";
 
         public List<Match> GetRecentMatches(int count)
         {
+            if (count <= 0)
+                return new List<Match>();
+
             Monitor.Enter(recentMathcesCache.Locker);
             try
             {
-                var matches = new List<Match>();
-                if (count <= 0)
-                    return matches;
-
-                if (recentMathcesCache.TryGetItems(count, ref matches))
+                List<Match> matches;
+                if (recentMathcesCache.TryGetItems(count, out matches))
                     return matches;
 
                 using (var connection = new SQLiteConnection(connectionString))
@@ -353,14 +352,13 @@ LIMIT {maxCountItemsInReport}";
 
         public List<BestPlayer> GetBestPlayers(int count)
         {
+            if (count <= 0)
+                return new List<BestPlayer>();
+
             Monitor.Enter(bestPlayersCache.Locker);
             try
             {
-                var bestPlayers = new List<BestPlayer>();
-                if (count <= 0)
-                    return bestPlayers;
-
-                if (bestPlayersCache.TryGetItems(count, ref bestPlayers))
+                List<BestPlayer> bestPlayers; if (bestPlayersCache.TryGetItems(count, out bestPlayers))
                     return bestPlayers;
 
                 using (var connection = new SQLiteConnection(connectionString))
@@ -401,11 +399,16 @@ LIMIT {maxCountItemsInReport}";
 
         public List<PopularServer> GetPopularServers(int count)
         {
-            Monitor.Enter(populareServersCache.Locker);
+            if (count <= 0)
+                return new List<PopularServer>();
+
+            Monitor.Enter(popularServersCache.Locker);
             try
             {
-                var popularServers = new List<PopularServer>();
-                if (count <= 0) return popularServers;
+                List<PopularServer> popularServers;
+                if (popularServersCache.TryGetItems(count, out popularServers))
+                    return popularServers;
+
                 using (var connection = new SQLiteConnection(connectionString))
                 {
                     connection.Open();
@@ -443,13 +446,13 @@ LIMIT {maxCountItemsInReport}";
                     }
                     connection.Close();
                 }
-                populareServersCache.Update(popularServers);
+                popularServersCache.Update(popularServers);
 
                 return popularServers.Take(count).ToList();
             }
             finally
             {
-                Monitor.Exit(populareServersCache.Locker);
+                Monitor.Exit(popularServersCache.Locker);
             }
         }
 
@@ -692,8 +695,8 @@ COUNT({Tables.Match}.{MatchResult.Properties.Id}) AS {MatchResult.Properties.Pop
 {MatchResult.Properties.GameMode},
 {MatchResult.Properties.Map}
 FROM {Tables.Match}
-LEFT JOIN {Tables.Scoreboard} ON {Tables.Scoreboard}.{Scoreboard.Properties.MatchId} = {Tables.Match}.{MatchResult
-                .Properties.Id}
+LEFT JOIN {Tables.Scoreboard} 
+ON {Tables.Scoreboard}.{Scoreboard.Properties.MatchId} = {Tables.Match}.{MatchResult.Properties.Id}
 WHERE {Match.Properties.Server} = '{endpoint}'
 GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
             var command = new SQLiteCommand(query, connection, transaction);
@@ -752,7 +755,7 @@ GROUP BY {Tables.Match}.{MatchResult.Properties.Id}";
 
         private readonly ReportCache<BestPlayer> bestPlayersCache = new ReportCache<BestPlayer>(cacheTime);
 
-        private readonly ReportCache<PopularServer> populareServersCache = new ReportCache<PopularServer>(cacheTime);
+        private readonly ReportCache<PopularServer> popularServersCache = new ReportCache<PopularServer>(cacheTime);
 
         private readonly StatsCache<ServerStat> serverStatCache = new StatsCache<ServerStat>(cacheTime);
 

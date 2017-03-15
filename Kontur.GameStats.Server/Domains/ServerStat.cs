@@ -8,6 +8,12 @@ namespace Kontur.GameStats.Server.Domains
     {
         public ServerStat() { }
 
+        public ServerStat(string endpoint)
+        {
+            Endpoint = endpoint;
+        }
+
+        [JsonConstructor]
         public ServerStat(
             string endpoint,
             int totalMatchesPlayed,

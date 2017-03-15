@@ -6,16 +6,16 @@ using Kontur.GameStats.Server.Inerfaces;
 
 namespace Kontur.GameStats.Server.Utils
 {
-    public class StatsCache<T> where T : ICacheable
+    public class StatsCache<T> where T : class, ICacheable
     {
         public StatsCache(int cacheTime)
         {
             this.cacheTime = cacheTime;
         }
 
-        private readonly object locker = new object();
+        public int CountItems => items.Count;
 
-        public bool TryGetItem(string key, ref T result)
+        public bool TryGetItem(string key, out T result)
         {
             Monitor.Enter(locker);
             try
@@ -25,8 +25,11 @@ namespace Kontur.GameStats.Server.Utils
                          .Select(i => i.Key).ToList();
                 removeItemsKey.ForEach(i => items.Remove(i));
                 CacheItem cacheItem;
-                if (!items.TryGetValue(key, out cacheItem))
+                if(!items.TryGetValue(key, out cacheItem))
+                {
+                    result = null;
                     return false;
+                }
 
                 result = cacheItem.Entity;
                 return true;
@@ -54,11 +57,13 @@ namespace Kontur.GameStats.Server.Utils
             }
         }
 
-        private readonly SortedDictionary<string, CacheItem> items = new SortedDictionary<string, CacheItem>();
+        private readonly object locker = new object();
+
+        private readonly Dictionary<string, CacheItem> items = new Dictionary<string, CacheItem>();
 
         private readonly int cacheTime;
 
-        private class CacheItem : IComparable
+        private class CacheItem
         {
             public CacheItem(T entity, DateTime lastUpdateDateTime)
             {
@@ -69,11 +74,6 @@ namespace Kontur.GameStats.Server.Utils
             public T Entity { get; }
 
             public DateTime LastUpdateDateTime { get; }
-
-            public int CompareTo(object obj)
-            {
-                return LastUpdateDateTime.CompareTo((obj as CacheItem)?.LastUpdateDateTime);
-            }
         }
     }
 }

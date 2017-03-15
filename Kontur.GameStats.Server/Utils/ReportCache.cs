@@ -13,10 +13,13 @@ namespace Kontur.GameStats.Server.Utils
             this.cacheTime = cacheTime;
         }
 
-        public bool TryGetItems(int count, ref List<T> result)
+        public bool TryGetItems(int count, out List<T> result)
         {
-            if (!((DateTime.Now - lastUpdateDateTime).TotalSeconds < cacheTime))
+            if(!((DateTime.Now - lastUpdateDateTime).TotalSeconds < cacheTime))
+            {
+                result = new List<T>();
                 return false;
+            }
 
             result = list.Take(count).ToList();
             return true;

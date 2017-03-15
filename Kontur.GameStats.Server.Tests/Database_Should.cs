@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Kontur.GameStats.Server.Domains;
+using Kontur.GameStats.Server.Tests.Utils;
 using Kontur.GameStats.Server.Utils;
 using NUnit.Framework;
 
@@ -538,6 +539,20 @@ namespace Kontur.GameStats.Server.Tests
             var actualPopularServers = database.GetPopularServers(5);
 
             Assert.AreEqual(5, actualPopularServers.Count);
+        }
+
+        [Test]
+        public void CountServers50_WhenGetPopularServers_For51ServersWithMatches()
+        {
+            var data = new RandomData(51);
+            var servers = data.GetServers();
+            var matches = servers.SelectMany(i => data.GetUniqueRandomMatchesForServer(i, 1)).ToList();
+            servers.ForEach(i => database.InsertOrUpdateServer(i));
+            matches.ForEach(i => database.TryInsertOrIgnoreMatch(i));
+
+            var actualPopularServers = database.GetPopularServers(51);
+
+            Assert.AreEqual(50, actualPopularServers.Count);
         }
 
         [Test]
